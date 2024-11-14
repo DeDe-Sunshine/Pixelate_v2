@@ -7,88 +7,112 @@ import base64
 
 app = Flask(__name__)
 
-def face_zoom(image):
+def face_zoom(image, filename):
     """
-    Locate face and crop with additional surrounding area.
+    locate face and crop + 1x surrounding
     Args:
         image: The input image (NumPy array).
+
     Returns:
-        Cropped face with surrounding area, or the original image if no face is found.
+        face + 1x surrounding
     """
+
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Load frontal face detector
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-    # If no face is detected, return the original image
-    if len(faces) == 0:
-        return image
+    faceCascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    faces = faceCascade.detectMultiScale(
+        gray,
+        scaleFactor=1.3,
+        minNeighbors=3,
+        minSize=(30, 30)
+    )
 
-    # Use the first detected face
-    x, y, w, h = faces[0]
-    y1 = max(0, y - round(0.5 * h))
-    y2 = min(image.shape[0], y + round(1.5 * h))
-    x1 = max(0, x - round(0.5 * w))
-    x2 = min(image.shape[1], x + round(1.5 * w))
-    return image[y1:y2, x1:x2]
+    print("[INFO] Found {0} Faces.".format(len(faces)))
+    count = 1
+    # Display and ask for selection
+    if len(faces) > 1: 
+        for (x, y, w, h) in faces:
+            roi_color = image[(y-round(0.5*h)): y + round(1.5*h), (x-round(0.5*w)) : x + round(1.5*w)]
+            window_name = 'Face '+str(count)
+            fig = plt.figure()
+            plt.imshow(cv2.cvtColor(roi_color, cv2.COLOR_BGR2RGB))
+            plt.title(window_name)
+            plt.show(block=False)
+            answer = input("Is this the right face? Enter Y for yes or N for no: ")
+            
+            if answer == "N":
+                #plt.waitforbuttonpress(0)
+                plt.close(fig)
+                count = count+1
+                continue
+            elif answer == "Y": 
+                #plt.waitforbuttonpress(0)
+                plt.close(fig)
+                return roi_color
+            
+        
+    else: 
+        roi_color = image[(y-round(0.5*h)): y + round(1.5*h), (x-round(0.5*w)) : x + round(1.5*w)]
+        return roi_color
 
-def process_image_for_column(image, pixel_sizes, blur_levels):
+def auto_brightness_correction(image):
     """
-    Process the image by applying a combination of pixelation and blur effects.
+    Automatically adjusts the brightness of an image using histogram equalization.
+
     Args:
-        image: PIL image to be processed.
-        pixel_sizes: List of pixelation sizes.
-        blur_levels: List of blur radii.
+        image: The input image (NumPy array).
+
     Returns:
-        List of base64-encoded images for display.
+        The brightness-corrected image (NumPy array).
     """
-    processed_images = []
 
-    for pixel_size, blur_level in zip(pixel_sizes, blur_levels):
-        # Apply pixelation by resizing down and then back up
-        pixelated = image.resize(
-            (max(1, image.width // pixel_size), max(1, image.height // pixel_size)),
-            Image.NEAREST
-        )
-        pixelated = pixelated.resize((image.width, image.height), Image.NEAREST)
+    # Convert the image to YCrCb color space
+    ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
 
-        # Apply blur if specified
-        if blur_level > 0:
-            blurred = pixelated.filter(ImageFilter.GaussianBlur(blur_level))
-        else:
-            blurred = pixelated
+    # Split the channels
+    y, cr, cb = cv2.split(ycrcb)
 
-        # Convert processed image to base64
-        buffered = BytesIO()
-        blurred.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        processed_images.append(img_str)
+    # Apply histogram equalization to the Y channel
+    y_eq = cv2.equalizeHist(y)
 
-    return processed_images
+    # Merge the channels back together
+    ycrcb_eq = cv2.merge((y_eq, cr, cb))
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        if "file" not in request.files:
-            return redirect(request.url)
-        file = request.files["file"]
-        if file.filename == "":
-            return redirect(request.url)
-        if file:
-            # Load the image and convert to RGB
-            image = Image.open(file).convert("RGB")
+    # Convert back to BGR color space
+    corrected_image = cv2.cvtColor(ycrcb_eq, cv2.COLOR_YCrCb2BGR)
 
-            # Define pixelation and blur levels for 4 images: from most blurred to fully clear
-            pixel_sizes = [64, 32, 20, 1]  # From high pixelation to no pixelation
-            blur_levels = [16, 12, 8, 0]   # From high blur to no blur
+    return corrected_image
 
-            # Generate processed images for the column
-            processed_images = process_image_for_column(image, pixel_sizes, blur_levels)
+def shuffle_pixels(image):
+    """Shuffles the pixels of an image."""
 
-            return render_template("index.html", processed_images=processed_images)
+    image = np.array(image)
+    rows, cols, channels = image.shape
 
-    return render_template("index.html", processed_images=None)
+    for i in range(rows):
+        for j in range(cols):
+            rand_i = random.randint(0, rows - 1)
+            rand_j = random.randint(0, cols - 1)
+
+            image[i, j], image[rand_i, rand_j] = image[rand_i, rand_j], image[i, j]
+
+    return Image.fromarray(image)
+
+def pixelate(image, pixel_size, shuffle):
+    """Pixelates an image."""
+
+    width, height = image.size
+    new_width = width // pixel_size
+    new_height = height // pixel_size
+    print(f'Sized to {new_width} x {new_height}')
+    image = image.resize((new_width, new_height), Image.NEAREST)
+    if shuffle == 1:
+        image = shuffle_pixels(image)
+        image = image.resize((width, height), Image.NEAREST)
+    else:
+        image = image.resize((width, height), Image.NEAREST)
+
+    return image, new_width, new_height
 
 if __name__ == "__main__":
     app.run(debug=True)
