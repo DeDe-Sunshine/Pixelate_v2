@@ -84,9 +84,9 @@ def index():
             blur_levels = [16, 12, 8, 0]   # From high blur to no blur
 
             # zoom and find
-            zoomed_image = facee_zoom(image)
+            #zoomed_image = facee_zoom(image)
             # Generate processed images for the column
-            processed_images = process_image_for_column(zoomed_image, pixel_sizes, blur_levels)
+            processed_images = process_image_for_column(image, pixel_sizes, blur_levels)
 
             return render_template("index.html", processed_images=processed_images)
 
