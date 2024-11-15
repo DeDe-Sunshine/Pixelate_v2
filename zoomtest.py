@@ -55,7 +55,7 @@ def index():
             #zoomed_image = facee_zoom(image)
             # Generate processed images for the column
             processed_images = face_zoom(image)
-            _, buffer = cv2.imencode('.jpg', np_array)
+            _, buffer = cv2.imencode('.jpg', processed_images)
 
             # Convert to Base64
             base64_image = base64.b64encode(buffer).decode('utf-8')
