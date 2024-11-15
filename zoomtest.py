@@ -44,7 +44,8 @@ def index():
             return redirect(request.url)
         if file:
             # Load the image and convert to RGB
-            image = Image.open(file).convert("RGB")
+            #image = Image.open(file).convert("RGB")
+            image = cv2.imread(file)
 
             # Define pixelation and blur levels for 4 images: from most blurred to fully clear
             pixel_sizes = [64, 32, 20, 1]  # From high pixelation to no pixelation
