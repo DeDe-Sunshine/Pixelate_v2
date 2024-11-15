@@ -55,8 +55,14 @@ def index():
             #zoomed_image = facee_zoom(image)
             # Generate processed images for the column
             processed_images = face_zoom(image)
+            _, buffer = cv2.imencode('.jpg', np_array)
 
-            return render_template("index.html", processed_images=processed_images)
+            # Convert to Base64
+            base64_image = base64.b64encode(buffer).decode('utf-8')
+
+
+
+            return render_template("index.html", processed_images=base64_image)
 
     return render_template("index.html", processed_images=None)
 
